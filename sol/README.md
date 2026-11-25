@@ -48,27 +48,29 @@ A deployment whose functions differ would ship as a new library.
 
 ## Testnets
 
-`LibID` has the production addresses. `LibIDTestnet` has the same functions
-with the testnet addresses. To build for a testnet, change the import and
-nothing else:
+`LibID` holds two pairs of addresses and picks one by `block.chainid`. The
+same import and the same build work on every chain:
 
-```solidity
-import {LibIDTestnet as LibID} from "libid/LibIDTestnet.sol";
-```
-
-| Library | Chains | IdentityRegistry | HandleEscrow |
+| Pair | Chains (chain id) | IdentityRegistry | HandleEscrow |
 |---|---|---|---|
-| `LibID` | Ethereum, Arbitrum One, Base, BNB Smart Chain, Eden | `0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA` | `0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5` |
-| `LibIDTestnet` | Sepolia, Arbitrum Sepolia, Eden testnet | `0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D` | `0xE7eb0c675B757C12B1312dF652242b863624Bfab` |
+| Testnet | Sepolia (11155111), Arbitrum Sepolia (421614), Eden testnet (3735928814) | `0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D` | `0xE7eb0c675B757C12B1312dF652242b863624Bfab` |
+| Production | Ethereum, Arbitrum One, Base, BNB Smart Chain, Eden | `0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA` | `0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5` |
 
 They are chain-configurations' addresses: libID-contracts v0.19's
 IdentityRegistry and v0.21's HandleEscrow, deployed on every chain in the
-table. On any other chain, `isAvailable()` and `isEscrowAvailable()` are
+table. Every chain without a testnet chain id gets the production pair,
+including a testnet not listed here and a local chain such as anvil's 31337.
+Where that pair has no code, `isAvailable()` and `isEscrowAvailable()` are
 false and the calls revert `LibIDUnavailable`. `isAvailable` checks only
-that the registry address has code.
+that the registry address has code. `LibID.registry()` and `LibID.escrow()`
+return this chain's pair.
 
-A local chain has no contract at these addresses. Use `LibIDTestBase` in
-your tests, as below.
+The testnet chain ids are compiled into your contract: a new testnet chain
+needs a release of this library, and a rebuild against it, before your
+contract picks the testnet pair there.
+
+A local chain has no contract at these addresses. Use `LibIDTestBase` in your
+tests, as below.
 
 ## Install
 
@@ -84,8 +86,8 @@ It needs Solidity 0.8.20 or later.
 ## Testing your contract
 
 `LibIDTestBase` is a base for Foundry tests. It puts the real IdentityRegistry
-and HandleEscrow at the addresses LibID has built in, and binds handles
-without a ceremony:
+and HandleEscrow at the addresses LibID picks for the test's chain, and binds
+handles without a ceremony:
 
 ```solidity
 import {LibID} from "libid/LibID.sol";
@@ -93,7 +95,7 @@ import {LibIDTestBase} from "libid/test/LibIDTestBase.sol";
 
 contract GuestbookTest is LibIDTestBase {
     function setUp() public {
-        deployLibID(); // or deployLibIDTestnet() for LibIDTestnet
+        deployLibID(); // after vm.chainId(11155111) for the testnet pair
     }
 
     function test_theHolderSigns() public {
@@ -170,6 +172,8 @@ builds and tests it.
 | `contribution(handleNode, token)` | what your contract has escrowed at that node, and its refund date |
 | `isAvailable()` | whether this chain has the IdentityRegistry, for reads and gates |
 | `isEscrowAvailable()` | whether it also has the HandleEscrow, bound to that registry, for payments |
+| `isTestnet()` | whether this chain gets the testnet pair |
+| `registry()`, `escrow()` | this chain's IdentityRegistry and HandleEscrow addresses |
 
 Platform ids are `LibID.GITHUB`, `LibID.X` and `LibID.GOOGLE`. A handle is
 looked up as typed, with only A-Z folded to a-z. `OctoCat` finds `octocat`;
@@ -250,18 +254,15 @@ SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
   forge test --match-contract 'ForkTest$'
 ```
 
-`src/LibIDTestnet.sol` is generated: edit `src/LibID.sol`, then run
-`./script/testnet.sh`. CI fails when the two differ in anything but the names
-and addresses.
-
 The tests use `LibIDTestBase`: they deploy the real libID contracts, pinned
-in `lib/libID-contracts`, at the addresses LibID has built in, and bind handles with the dates the real
+in `lib/libID-contracts`, at the addresses LibID picks, and bind handles with the dates the real
 verifiers give, at both ends of their acceptance windows. One test checks
-both libraries' addresses against their environment's factory and the CREATE3
-derivation of the canonical names. The fork tests run `LibID` against
-Ethereum mainnet and `LibIDTestnet` against Sepolia and Eden testnet, on
-local forks: they read, and pay a handle nobody holds and refund it after its
-refund date. Where a chain has no code at the addresses, they check only
+both pairs of addresses against their environment's factory and the CREATE3
+derivation of the canonical names, and others check which chain ids get
+which pair. The fork tests run `LibID` against Ethereum mainnet, Sepolia and
+Eden testnet, on local forks, and check that it picks that chain's pair.
+They read, and pay a handle nobody holds and refund it after its refund
+date. Where a chain has no code at the addresses, they check only
 that the library reports it unavailable, and skip the rest. Where it has the registry but not the escrow, they skip the payments. Each is
 skipped without its RPC URL (`ETH_RPC_URL`, `SEPOLIA_RPC_URL`,
 `EDEN_RPC_URL`), unless `LIBID_REQUIRE_FORK=true`, which CI sets: then a

@@ -40,7 +40,7 @@ contract GuestbookTest is LibIDTestBase {
         hoax(bob, 1 ether);
         bytes32 node = book.tip{value: 1 ether}("nobody");
         (uint256 amount, uint64 refundableAt) =
-            ILibIDEscrow(LibID.ESCROW).contribution(node, LibID.NATIVE, address(book));
+            ILibIDEscrow(LibID.escrow()).contribution(node, LibID.NATIVE, address(book));
         assertEq(amount, 1 ether);
 
         vm.warp(refundableAt);

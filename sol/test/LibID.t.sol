@@ -16,29 +16,18 @@ import {IdentityRegistry} from "libid-contracts/identity/IdentityRegistry.sol";
 import {IIdentityRegistry} from "libid-contracts/identity/IIdentityRegistry.sol";
 
 import {LibID} from "../src/LibID.sol";
-import {LibIDTestnet} from "../src/LibIDTestnet.sol";
 import {LibIDTestBase} from "../src/test/LibIDTestBase.sol";
 
-/// What the fork tests call, on `Consumer` and `TestnetConsumer` alike.
-interface IConsumer {
-    function isAvailable() external view returns (bool);
-    function isEscrowAvailable() external view returns (bool);
-    function resolve(bytes32 platformId, string calldata handle) external view returns (address);
-    function bindingOf(bytes32 platformId, string calldata handle) external view returns (address, uint64);
-    function isHolder(address account, bytes32 platformId, string calldata handle, uint256 maxAge)
-        external
-        view
-        returns (bool);
-    function pay(bytes32 platformId, string calldata handle, uint256 amount) external returns (bytes32);
-    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount)
-        external
-        returns (bytes32);
-    function refund(bytes32 handleNode, address token, address recipient) external;
-    function contribution(bytes32 handleNode, address token) external view returns (uint256, uint64);
-}
-
 /// @notice A contract that uses LibID, as an integrator's would.
-contract Consumer is IConsumer {
+contract Consumer {
+    function registry() external view returns (address) {
+        return LibID.registry();
+    }
+
+    function escrow() external view returns (address) {
+        return LibID.escrow();
+    }
+
     function isAvailable() external view returns (bool) {
         return LibID.isAvailable();
     }
@@ -186,7 +175,7 @@ contract LibIDTest is LibIDTestBase {
 
         // The real contracts at their canonical addresses. X is left out, to
         // test a platform with no verifier.
-        deployLibIDAt(LibID.REGISTRY, LibID.ESCROW);
+        deployLibIDAt(LibID.registry(), LibID.escrow());
         addLibIDPlatform(LibID.GITHUB);
         addLibIDPlatform(LibID.GOOGLE);
 
@@ -199,10 +188,32 @@ contract LibIDTest is LibIDTestBase {
     /// The constants are the factory's CREATE3 addresses for the canonical
     /// names, computed here independently of the literals in LibID.
     function test_theAddressesAreTheFactoryAddressesOfTheCanonicalNames() public pure {
-        assertEq(LibID.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry.2"), FACTORY));
-        assertEq(LibID.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.4"), FACTORY));
-        assertEq(LibIDTestnet.REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry.2"), TESTNET_FACTORY));
-        assertEq(LibIDTestnet.ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.4"), TESTNET_FACTORY));
+        assertEq(LibID.PRODUCTION_REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry.2"), FACTORY));
+        assertEq(LibID.PRODUCTION_ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.4"), FACTORY));
+        assertEq(LibID.TESTNET_REGISTRY, Create3.addressOf(keccak256("libid.IdentityRegistry.2"), TESTNET_FACTORY));
+        assertEq(LibID.TESTNET_ESCROW, Create3.addressOf(keccak256("libid.HandleEscrow.4"), TESTNET_FACTORY));
+    }
+
+    /// Sepolia, Arbitrum Sepolia and Eden testnet, by chain-configurations'
+    /// chain ids, get the testnet addresses.
+    function test_theTestnetsGetTheTestnetAddresses() public {
+        uint256[3] memory testnets = [uint256(11155111), 421614, 3735928814];
+        for (uint256 i; i < testnets.length; ++i) {
+            vm.chainId(testnets[i]);
+            assertEq(consumer.registry(), LibID.TESTNET_REGISTRY);
+            assertEq(consumer.escrow(), LibID.TESTNET_ESCROW);
+        }
+    }
+
+    /// Every other chain gets the production addresses: the production
+    /// chains, a local anvil chain, and a testnet that is not listed.
+    function test_everyOtherChainGetsTheProductionAddresses() public {
+        uint256[7] memory others = [uint256(1), 42161, 8453, 56, 714, 31337, 11155420];
+        for (uint256 i; i < others.length; ++i) {
+            vm.chainId(others[i]);
+            assertEq(consumer.registry(), LibID.PRODUCTION_REGISTRY);
+            assertEq(consumer.escrow(), LibID.PRODUCTION_ESCROW);
+        }
     }
 
     function test_thePlatformIdsAreTheContractsOwn() public pure {
@@ -468,7 +479,7 @@ contract LibIDTest is LibIDTestBase {
     function test_payReturnsTheNodeTheEscrowBooks() public {
         bytes32 node = keccak256("another node");
         vm.mockCall(
-            LibID.REGISTRY, abi.encodeCall(IIdentityRegistry.handleNodeOf, (LibID.GITHUB, "carol")), abi.encode(node)
+            LibID.registry(), abi.encodeCall(IIdentityRegistry.handleNodeOf, (LibID.GITHUB, "carol")), abi.encode(node)
         );
         assertEq(consumer.pay(LibID.GITHUB, "carol", 1 ether), node);
         assertEq(libidEscrow.escrowed(node, LibID.NATIVE), 1 ether);
@@ -519,7 +530,7 @@ contract LibIDTest is LibIDTestBase {
         _bind(alice, "1001", "octocat", true);
         consumer.payToken(LibID.GITHUB, "octocat", address(token), 40);
         assertEq(token.balanceOf(alice), 40);
-        assertEq(token.allowance(address(consumer), LibID.ESCROW), 0);
+        assertEq(token.allowance(address(consumer), LibID.escrow()), 0);
     }
 
     function test_payTokenWorksWithATokenThatReturnsNothing() public {
@@ -539,10 +550,10 @@ contract LibIDTest is LibIDTestBase {
     function test_payTokenResetsAnAllowanceTheTokenWillNotChange() public {
         StrictApproveToken token = new StrictApproveToken();
         token.mint(address(consumer), 100);
-        token.setAllowance(address(consumer), LibID.ESCROW, 7);
+        token.setAllowance(address(consumer), LibID.escrow(), 7);
         bytes32 node = consumer.payToken(LibID.GITHUB, "carol", address(token), 25);
         assertEq(libidEscrow.escrowed(node, address(token)), 25);
-        assertEq(token.allowance(address(consumer), LibID.ESCROW), 0);
+        assertEq(token.allowance(address(consumer), LibID.escrow()), 0);
     }
 
     /// The escrow books what arrives, so a token that takes a fee from the
@@ -646,7 +657,7 @@ contract LibIDTest is LibIDTestBase {
         consumer.refund(node, address(token), recipient);
         assertEq(token.balanceOf(recipient), 990);
         assertEq(libidEscrow.escrowed(node, address(token)), 0);
-        assertEq(token.balanceOf(LibID.ESCROW), 0);
+        assertEq(token.balanceOf(LibID.escrow()), 0);
     }
 
     function test_refundAfterTheHolderClaimedReverts() public {
@@ -702,7 +713,7 @@ contract LibIDTest is LibIDTestBase {
     /// Reads and gates need only the registry; payments need the escrow too.
     function test_aChainWithOnlyTheRegistryStillReadsAndGates() public {
         _bind(alice, "1001", "octocat", true);
-        vm.etch(LibID.ESCROW, "");
+        vm.etch(LibID.escrow(), "");
         assertTrue(consumer.isAvailable());
         assertFalse(consumer.isEscrowAvailable());
         assertEq(consumer.resolve(LibID.GITHUB, "octocat", 1 days), alice);
@@ -723,7 +734,7 @@ contract LibIDTest is LibIDTestBase {
     /// What was escrowed before can still be refunded.
     function test_anEscrowBoundToAnotherRegistryIsNotAvailable() public {
         bytes32 node = consumer.pay(LibID.GITHUB, "carol", 1 ether);
-        vm.mockCall(LibID.ESCROW, abi.encodeWithSignature("registry()"), abi.encode(address(0xbeef)));
+        vm.mockCall(LibID.escrow(), abi.encodeWithSignature("registry()"), abi.encode(address(0xbeef)));
         assertFalse(consumer.isEscrowAvailable());
 
         bytes memory unavailable = abi.encodeWithSelector(LibID.LibIDUnavailable.selector);
@@ -742,14 +753,14 @@ contract LibIDTest is LibIDTestBase {
 
     /// An answer that is not a clean address is a plain no, not a revert.
     function test_aDirtyRegistryAnswerIsNotAvailable() public {
-        uint256 dirty = uint256(uint160(LibID.REGISTRY)) | (uint256(1) << 200);
-        vm.mockCall(LibID.ESCROW, abi.encodeWithSignature("registry()"), abi.encode(dirty));
+        uint256 dirty = uint256(uint160(LibID.registry())) | (uint256(1) << 200);
+        vm.mockCall(LibID.escrow(), abi.encodeWithSignature("registry()"), abi.encode(dirty));
         assertFalse(consumer.isEscrowAvailable());
     }
 
     function test_everyCallRevertsClearlyWhereLibIDIsNotDeployed() public {
-        vm.etch(LibID.REGISTRY, "");
-        vm.etch(LibID.ESCROW, "");
+        vm.etch(LibID.registry(), "");
+        vm.etch(LibID.escrow(), "");
         assertFalse(consumer.isAvailable());
         assertFalse(consumer.isEscrowAvailable());
 
@@ -886,12 +897,25 @@ contract LibIDTestBaseTest is LibIDTestBase {
         assertEq(name, "alice@gmail.com");
     }
 
-    function test_deployLibIDTestnetUsesTheTestnetAddresses() public {
-        deployLibIDTestnet();
-        assertFalse(LibID.isAvailable());
-        assertTrue(LibIDTestnet.isEscrowAvailable());
+    /// On a testnet's chain id, libID goes to the testnet addresses.
+    function test_deployLibIDOnATestnetUsesTheTestnetAddresses() public {
+        vm.chainId(11155111);
+        deployLibID();
+        assertEq(address(libidRegistry), LibID.TESTNET_REGISTRY);
+        assertEq(LibID.PRODUCTION_REGISTRY.code.length, 0);
+        Consumer consumer = new Consumer();
+        assertTrue(consumer.isEscrowAvailable());
         bindHandle(alice, LibID.GITHUB, "1001", "octocat");
-        assertEq(LibIDTestnet.resolve(LibIDTestnet.GITHUB, "octocat"), alice);
+        assertEq(consumer.resolve(LibID.GITHUB, "octocat"), alice);
+    }
+
+    /// On a local chain, libID goes to the production addresses.
+    function test_deployLibIDOnALocalChainUsesTheProductionAddresses() public {
+        assertEq(block.chainid, 31337);
+        deployLibID();
+        assertEq(address(libidRegistry), LibID.PRODUCTION_REGISTRY);
+        assertEq(address(libidEscrow), LibID.PRODUCTION_ESCROW);
+        assertEq(LibID.TESTNET_REGISTRY.code.length, 0);
     }
 
     /// Each bind moves the clock, so binds in one block do not refuse each
@@ -936,7 +960,7 @@ contract LibIDTestBaseTest is LibIDTestBase {
     }
 
     function test_codeThatIsNotLibIDIsRefused() public {
-        vm.etch(LibID.REGISTRY, hex"00");
+        vm.etch(LibID.registry(), hex"00");
         vm.expectRevert(bytes("LibIDTestBase: code at the addresses is not a libID deployment"));
         this.deployLibIDFromOutside();
     }
@@ -961,72 +985,21 @@ contract LibIDTestBaseTest is LibIDTestBase {
     }
 }
 
-/// `Consumer`'s fork-tested calls, through LibIDTestnet.
-contract TestnetConsumer is IConsumer {
-    function isAvailable() external view returns (bool) {
-        return LibIDTestnet.isAvailable();
-    }
-
-    function isEscrowAvailable() external view returns (bool) {
-        return LibIDTestnet.isEscrowAvailable();
-    }
-
-    function resolve(bytes32 platformId, string calldata handle) external view returns (address) {
-        return LibIDTestnet.resolve(platformId, handle);
-    }
-
-    function bindingOf(bytes32 platformId, string calldata handle) external view returns (address, uint64) {
-        return LibIDTestnet.bindingOf(platformId, handle);
-    }
-
-    function isHolder(address account, bytes32 platformId, string calldata handle, uint256 maxAge)
-        external
-        view
-        returns (bool)
-    {
-        return LibIDTestnet.isHolder(account, platformId, handle, maxAge);
-    }
-
-    function pay(bytes32 platformId, string calldata handle, uint256 amount) external returns (bytes32) {
-        return LibIDTestnet.pay(platformId, handle, amount);
-    }
-
-    function payToken(bytes32 platformId, string calldata handle, address token, uint256 amount)
-        external
-        returns (bytes32)
-    {
-        return LibIDTestnet.payToken(platformId, handle, token, amount);
-    }
-
-    function refund(bytes32 handleNode, address token, address recipient) external {
-        LibIDTestnet.refund(handleNode, token, recipient);
-    }
-
-    function contribution(bytes32 handleNode, address token) external view returns (uint256, uint64) {
-        return LibIDTestnet.contribution(handleNode, token);
-    }
-
-    receive() external payable {}
-}
-
-/// Runs a library against a live deployment, on a local fork of the chain in
-/// the RPC URL in `rpcVariable`. Skipped when that is empty, unless
+/// Runs LibID against a live deployment, on a local fork of the chain in the
+/// RPC URL in `rpcVariable`. Skipped when that is empty, unless
 /// LIBID_REQUIRE_FORK is set, as CI sets it: then a missing RPC fails. Where
-/// the chain has no code at the library's addresses, only
+/// the chain has no code at LibID's addresses, only
 /// `test_isAvailableOnlyWhereDeployed` runs; where it has the registry but
 /// not the escrow, the tests that pay are skipped.
 abstract contract ForkTest is LibIDTestBase {
-    IConsumer internal consumer;
+    Consumer internal consumer;
     IdentityRegistry internal registry;
     HandleEscrow internal escrow;
 
     function rpcVariable() internal pure virtual returns (string memory);
 
-    /// A consumer of the library under test, and the addresses it has built in.
-    function newConsumer() internal virtual returns (IConsumer, address registry_, address escrow_);
-
-    /// `LibIDTestBase`'s entry point for the library under test.
-    function deployLive() internal virtual;
+    /// The addresses LibID must pick on this chain.
+    function expectedAddresses() internal pure virtual returns (address registry_, address escrow_);
 
     function setUp() public {
         string memory rpc = vm.envOr(rpcVariable(), string(""));
@@ -1038,9 +1011,10 @@ abstract contract ForkTest is LibIDTestBase {
             vm.skip(true);
         }
         vm.createSelectFork(rpc);
-        address registry_;
-        address escrow_;
-        (consumer, registry_, escrow_) = newConsumer();
+        consumer = new Consumer();
+        (address registry_, address escrow_) = expectedAddresses();
+        assertEq(consumer.registry(), registry_);
+        assertEq(consumer.escrow(), escrow_);
         registry = IdentityRegistry(registry_);
         escrow = HandleEscrow(escrow_);
     }
@@ -1114,7 +1088,7 @@ abstract contract ForkTest is LibIDTestBase {
 
     /// `LibIDTestBase` uses the live deployment and binds through it.
     function test_theTestBaseBindsOnTheLiveDeployment() public escrowDeployed {
-        deployLive();
+        deployLibID();
         assertEq(address(libidRegistry), address(registry));
         assertEq(address(libidEscrow), address(escrow));
 
@@ -1160,35 +1134,27 @@ contract LibIDForkTest is ForkTest {
         return "ETH_RPC_URL";
     }
 
-    function newConsumer() internal override returns (IConsumer, address, address) {
-        return (new Consumer(), LibID.REGISTRY, LibID.ESCROW);
-    }
-
-    function deployLive() internal override {
-        deployLibID();
+    function expectedAddresses() internal pure override returns (address, address) {
+        return (LibID.PRODUCTION_REGISTRY, LibID.PRODUCTION_ESCROW);
     }
 }
 
-/// LibIDTestnet against a testnet chain.
+/// LibID against a testnet chain.
 abstract contract TestnetForkTest is ForkTest {
-    function newConsumer() internal override returns (IConsumer, address, address) {
-        return (new TestnetConsumer(), LibIDTestnet.REGISTRY, LibIDTestnet.ESCROW);
-    }
-
-    function deployLive() internal override {
-        deployLibIDTestnet();
+    function expectedAddresses() internal pure override returns (address, address) {
+        return (LibID.TESTNET_REGISTRY, LibID.TESTNET_ESCROW);
     }
 }
 
-/// LibIDTestnet against Sepolia.
-contract LibIDTestnetSepoliaForkTest is TestnetForkTest {
+/// LibID against Sepolia.
+contract LibIDSepoliaForkTest is TestnetForkTest {
     function rpcVariable() internal pure override returns (string memory) {
         return "SEPOLIA_RPC_URL";
     }
 }
 
-/// LibIDTestnet against Eden testnet.
-contract LibIDTestnetEdenForkTest is TestnetForkTest {
+/// LibID against Eden testnet.
+contract LibIDEdenForkTest is TestnetForkTest {
     function rpcVariable() internal pure override returns (string memory) {
         return "EDEN_RPC_URL";
     }

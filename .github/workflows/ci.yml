@@ -152,9 +152,6 @@ jobs:
         with:
           version: v1.7.1
 
-      - name: LibIDTestnet is generated from LibID
-        run: ./script/testnet.sh && git diff --exit-code -- src/LibIDTestnet.sol
-
       - name: Formatting
         run: forge fmt --check
 
@@ -163,12 +160,12 @@ jobs:
 
       # The oldest compiler the README promises, on the legacy pipeline,
       # building LibID.sol alone as an integrator's project would.
-      - name: LibID and LibIDTestnet compile with solc 0.8.20
+      - name: LibID compiles with solc 0.8.20
         env:
           FOUNDRY_VIA_IR: "false"
           FOUNDRY_OUT: ${{ runner.temp }}/libid-0.8.20/out
           FOUNDRY_CACHE_PATH: ${{ runner.temp }}/libid-0.8.20/cache
-        run: forge build src/LibID.sol src/LibIDTestnet.sol --use 0.8.20 --evm-version paris
+        run: forge build src/LibID.sol --use 0.8.20 --evm-version paris
 
       - name: Tests
         run: forge test -vv

@@ -17,12 +17,12 @@ import {IIdentityRegistry} from "libid-contracts/identity/IIdentityRegistry.sol"
 import {StubPlatformVerifier} from "libid-contracts/identity/test/StubPlatformVerifier.sol";
 
 import {LibID} from "../LibID.sol";
-import {LibIDTestnet} from "../LibIDTestnet.sol";
 
 /// @title LibIDTestBase
 /// @notice A base for Foundry tests of a contract that uses LibID. It puts the
-///         real IdentityRegistry and HandleEscrow at the addresses LibID has
-///         built in, and binds handles without a ceremony.
+///         real IdentityRegistry and HandleEscrow at the addresses LibID picks
+///         for the test's chain, and binds handles without a ceremony. A local
+///         chain such as anvil's 31337 gets the production addresses.
 ///
 /// @dev Where nothing is deployed at those addresses, the contracts from
 ///      libID-contracts are placed there behind proxies, with empty storage.
@@ -67,16 +67,11 @@ abstract contract LibIDTestBase is Test {
         if (mode == VmSafe.CallerMode.RecurrentPrank) vm.startPrank(sender, origin);
     }
 
-    /// @notice libID at `LibID`'s addresses, with GitHub, X and Google set up.
+    /// @notice libID at the addresses `LibID` picks for this chain, with
+    ///         GitHub, X and Google set up. Set the chain id first with
+    ///         `vm.chainId` to test against a testnet's addresses.
     function deployLibID() internal {
-        deployLibIDAt(LibID.REGISTRY, LibID.ESCROW);
-        _libidAddEveryPlatform();
-    }
-
-    /// @notice libID at `LibIDTestnet`'s addresses, with GitHub, X and Google
-    ///         set up.
-    function deployLibIDTestnet() internal {
-        deployLibIDAt(LibIDTestnet.REGISTRY, LibIDTestnet.ESCROW);
+        deployLibIDAt(LibID.registry(), LibID.escrow());
         _libidAddEveryPlatform();
     }
 

@@ -8,17 +8,17 @@ pragma solidity ^0.8.20;
 /// @dev The contracts sit at the same address on every chain of one
 ///      environment, so the addresses are constants. They name one
 ///      libID-contracts deployment, from chain-configurations: the v0.19
-///      IdentityRegistry and the v0.21 HandleEscrow. `LibID` has the
-///      production addresses, those of Ethereum, Arbitrum One, Base, BNB Smart
-///      Chain and Eden. `LibIDTestnet` has the testnet addresses, those of
-///      Sepolia, Arbitrum Sepolia and Eden testnet, and is generated from
-///      `LibID` with nothing else changed: import it as `LibID` to build for a
-///      testnet. Every function is `internal`: it is compiled into the
-///      calling contract, and there is nothing to deploy or link. Where a
-///      contract has no code, the functions that need it revert
-///      `LibIDUnavailable`: check `isAvailable` before reading or gating, and
-///      `isEscrowAvailable` before paying. A platform other than GitHub, X and
-///      Google makes every read and gate revert `UnknownPlatform`.
+///      IdentityRegistry and the v0.21 HandleEscrow. Each call picks its pair
+///      by `block.chainid`: Sepolia, Arbitrum Sepolia and Eden testnet get the
+///      testnet pair, and every other chain gets the production pair, that of
+///      Ethereum, Arbitrum One, Base, BNB Smart Chain and Eden. Any other
+///      testnet gets the production pair too, until a release lists it.
+///      Every function is `internal`: it is compiled into the calling
+///      contract, and there is nothing to deploy or link. Where a contract has
+///      no code, the functions that need it revert `LibIDUnavailable`: check
+///      `isAvailable` before reading or gating, and `isEscrowAvailable` before
+///      paying. A platform other than GitHub, X and Google makes every read
+///      and gate revert `UnknownPlatform`.
 ///
 ///      A handle is looked up as typed, with only A-Z folded to a-z. A
 ///      leading at-sign or a space makes another handle, which nobody holds.
@@ -32,10 +32,13 @@ pragma solidity ^0.8.20;
 ///      token runs its own code. Guard the calling function against reentrancy
 ///      and update your own state before paying.
 library LibID {
-    /// @notice The IdentityRegistry: which address holds which identity.
-    address internal constant REGISTRY = 0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA;
-    /// @notice The HandleEscrow: value sent to a handle before anyone holds it.
-    address internal constant ESCROW = 0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5;
+    /// @notice The production IdentityRegistry and HandleEscrow. Use
+    ///         `registry()` and `escrow()` for this chain's.
+    address internal constant PRODUCTION_REGISTRY = 0xF39343fEbdA25cAa8C3861954E33F8a0189D4FDA;
+    address internal constant PRODUCTION_ESCROW = 0xf2731aB2c9451A9191e0Ef64D7fd5352068eB1b5;
+    /// @notice The testnet IdentityRegistry and HandleEscrow.
+    address internal constant TESTNET_REGISTRY = 0x58Ac0CD5eC19C850A75D6183b3C3B2DE692FB20D;
+    address internal constant TESTNET_ESCROW = 0xE7eb0c675B757C12B1312dF652242b863624Bfab;
 
     /// @notice Platform ids: `keccak256` of the platform key.
     bytes32 internal constant GITHUB = keccak256("github");
@@ -54,21 +57,42 @@ library LibID {
     /// The token refused to approve the escrow.
     error ApproveFailed(address token);
 
+    /// @notice Whether this chain is one of the testnets: Sepolia, Arbitrum
+    ///         Sepolia or Eden testnet.
+    function isTestnet() internal view returns (bool) {
+        uint256 id = block.chainid;
+        return id == 11155111 || id == 421614 || id == 3735928814;
+    }
+
+    /// @notice The IdentityRegistry's address on this chain: which address
+    ///         holds which identity.
+    function registry() internal view returns (address) {
+        return isTestnet() ? TESTNET_REGISTRY : PRODUCTION_REGISTRY;
+    }
+
+    /// @notice The HandleEscrow's address on this chain: value sent to a
+    ///         handle before anyone holds it.
+    function escrow() internal view returns (address) {
+        return isTestnet() ? TESTNET_ESCROW : PRODUCTION_ESCROW;
+    }
+
     /// @notice Whether this chain has the IdentityRegistry, so reads and gates
     ///         work.
-    /// @dev Checks only that `REGISTRY` has code.
+    /// @dev Checks only that `registry()` has code.
     function isAvailable() internal view returns (bool) {
-        return REGISTRY.code.length != 0;
+        return registry().code.length != 0;
     }
 
     /// @notice Whether this chain also has the HandleEscrow, resolving through
     ///         that same registry, so `pay`, `payToken` and `refund` work.
     function isEscrowAvailable() internal view returns (bool) {
-        if (REGISTRY.code.length == 0 || ESCROW.code.length == 0) return false;
-        (bool ok, bytes memory ret) = ESCROW.staticcall(abi.encodeWithSelector(ILibIDEscrow.registry.selector));
+        address registry_ = registry();
+        address escrow_ = escrow();
+        if (registry_.code.length == 0 || escrow_.code.length == 0) return false;
+        (bool ok, bytes memory ret) = escrow_.staticcall(abi.encodeWithSelector(ILibIDEscrow.registry.selector));
         // Compared as a word, so an answer that is not a clean address is a
         // plain no rather than a decoding revert.
-        return ok && ret.length == 32 && abi.decode(ret, (uint256)) == uint256(uint160(REGISTRY));
+        return ok && ret.length == 32 && abi.decode(ret, (uint256)) == uint256(uint160(registry_));
     }
 
     // ─── Reading ────────────────────────────────────────────────────
@@ -174,7 +198,7 @@ library LibID {
     ///         registry can stop the handle text from reaching this node.
     function pay(bytes32 platformId, string memory handle, uint256 amount) internal returns (bytes32 handleNode) {
         handleNode = _escrowNode(platformId, handle);
-        ILibIDEscrow(ESCROW).deposit{value: amount}(platformId, handleNode, NATIVE, amount);
+        ILibIDEscrow(escrow()).deposit{value: amount}(platformId, handleNode, NATIVE, amount);
     }
 
     /// @notice Send `amount` of an ERC-20 token held by this contract to a
@@ -192,7 +216,7 @@ library LibID {
     {
         handleNode = _escrowNode(platformId, handle);
         _forceApprove(token, amount);
-        ILibIDEscrow(ESCROW).deposit(platformId, handleNode, token, amount);
+        ILibIDEscrow(escrow()).deposit(platformId, handleNode, token, amount);
     }
 
     /// @notice Take back this contract's escrowed deposits at `handleNode`, in
@@ -217,20 +241,22 @@ library LibID {
     // ─── Internals ──────────────────────────────────────────────────
 
     function _registry() private view returns (ILibIDRegistry) {
-        if (REGISTRY.code.length == 0) revert LibIDUnavailable();
-        return ILibIDRegistry(REGISTRY);
+        address registry_ = registry();
+        if (registry_.code.length == 0) revert LibIDUnavailable();
+        return ILibIDRegistry(registry_);
     }
 
     function _escrow() private view returns (ILibIDEscrow) {
-        if (ESCROW.code.length == 0) revert LibIDUnavailable();
-        return ILibIDEscrow(ESCROW);
+        address escrow_ = escrow();
+        if (escrow_.code.length == 0) revert LibIDUnavailable();
+        return ILibIDEscrow(escrow_);
     }
 
     /// @dev The registry's node for a handle. The registry must be the
     ///      escrow's, which books and pays out by that registry's nodes.
     function _escrowNode(bytes32 platformId, string memory handle) private view returns (bytes32) {
         if (!isEscrowAvailable()) revert LibIDUnavailable();
-        return ILibIDRegistry(REGISTRY).handleNodeOf(platformId, handle);
+        return ILibIDRegistry(registry()).handleNodeOf(platformId, handle);
     }
 
     /// @dev The holder and proof time of a handle.
@@ -239,8 +265,8 @@ library LibID {
         view
         returns (address holder, uint64 observedAt)
     {
-        ILibIDRegistry registry = _registry();
-        return registry.handleBinding(registry.handleNodeOf(platformId, handle));
+        ILibIDRegistry registry_ = _registry();
+        return registry_.handleBinding(registry_.handleNodeOf(platformId, handle));
     }
 
     /// @dev Adds rather than subtracts, so no `maxAge` can underflow or
@@ -261,7 +287,7 @@ library LibID {
     ///      first word of 1, as the escrow's SafeERC20 accepts. Only the first
     ///      word is copied, so a huge answer cannot burn the caller's gas.
     function _approve(address token, uint256 amount) private returns (bool ok) {
-        bytes memory data = abi.encodeWithSelector(0x095ea7b3, ESCROW, amount);
+        bytes memory data = abi.encodeWithSelector(0x095ea7b3, escrow(), amount);
         uint256 size;
         uint256 word;
         assembly ("memory-safe") {
