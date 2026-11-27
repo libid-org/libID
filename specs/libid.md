@@ -60,7 +60,8 @@ the implementation documentation, not this specification.
 ## System model and specification ownership
 
 libID turns an identity-platform authorization into a proof that a Consumer
-applies to one proof-bound transaction:
+applies to one proof-bound transaction, or that several Consumers each apply
+to their own entry of a proof-bound Operation List:
 
 ```text
 User -> Identity Platform -> Canonical Runtime -> Proving Circuit -> Consumer

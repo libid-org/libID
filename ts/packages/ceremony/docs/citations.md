@@ -165,6 +165,7 @@ with `pnpm exec vitest run src/testing/traceability.test.ts -u`.
 | TEST-CCDP-07 | [e2e/platforms.spec.ts](../e2e/platforms.spec.ts), [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts) |
 | TEST-CCDP-08 | [e2e/isolation.spec.ts](../e2e/isolation.spec.ts), [src/ccdp/client/ceremony.test.ts](../src/ccdp/client/ceremony.test.ts), [src/ccdp/documents/callback.test.ts](../src/ccdp/documents/callback.test.ts), [src/ccdp/documents/prover.test.ts](../src/ccdp/documents/prover.test.ts), [src/errors.test.ts](../src/errors.test.ts) |
 | TEST-COMMON-01 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
+| TEST-COMMON-02B | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
 | TEST-COMMON-04 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts) |
 | TEST-COMMON-05 | [src/platforms/authorization.test.ts](../src/platforms/authorization.test.ts), [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |
 | TEST-COMMON-06 | [src/notary/http.test.ts](../src/notary/http.test.ts), [src/platforms/conformance/notarized.test.ts](../src/platforms/conformance/notarized.test.ts) |

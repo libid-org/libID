@@ -72,6 +72,59 @@ describe('[TEST-COMMON-01] authorization digest', () => {
   })
 })
 
+// The Operation List vector of chain profiles §3.3, as its twelve literal words.
+describe('[TEST-COMMON-02B] operation list digest', () => {
+  const words = [
+    '0000000000000000000000000000000000000000000000000000000000000020',
+    '0000000000000000000000000000000000000000000000000000000000000002',
+    '0000000000000000000000000000000000000000000000000000000000000040',
+    '00000000000000000000000000000000000000000000000000000000000000c0',
+    '4d59cd4487de0a5957f8c83addaac7a1238175aa5c29eeea2fbef57a8f5165ac',
+    '0000000000000000000000000000000000000000000000000000000000000040',
+    '0000000000000000000000000000000000000000000000000000000000000020',
+    '0000000000000000000000001111111111111111111111111111111111111111',
+    '6b8fd3a153cb2bc403041d7ca7d029d031243d8143d49a248230df9dd07fb723',
+    '0000000000000000000000000000000000000000000000000000000000000040',
+    '0000000000000000000000000000000000000000000000000000000000000001',
+    'ff00000000000000000000000000000000000000000000000000000000000000',
+  ]
+  const bytesOf = (w: string[]) =>
+    Uint8Array.from(w.join('').match(/../g) ?? [], (b) => Number.parseInt(b, 16))
+  const keccakUtf8 = (s: string) => hex(keccak_256(new TextEncoder().encode(s)))
+  const digestOf = (transactionData: Uint8Array) =>
+    hex(
+      deriveAuthorizationDigest({
+        operationDomain: keccak_256(new TextEncoder().encode('libid.operations')),
+        platformCeremonyVersion: 1,
+        authorizationNonce,
+        transactionData,
+      }),
+    )
+
+  it('names the domains the spec names', () => {
+    expect(words[4]).toBe(keccakUtf8('libid.bind-identity'))
+    expect(words[8]).toBe(keccakUtf8('libid.test.a'))
+  })
+
+  it('reproduces the vector digest exactly', () => {
+    const listData = bytesOf(words)
+    expect(listData.length).toBe(384)
+    expect(digestOf(listData)).toBe(
+      '872d461409ba5b7731cc6aaf6abe7522b5f985d69ca66eb333e02e008e3ae496',
+    )
+  })
+
+  it('reproduces the one-entry bind list digest exactly', () => {
+    const one = '0000000000000000000000000000000000000000000000000000000000000001'
+    const firstEntry = '0000000000000000000000000000000000000000000000000000000000000020'
+    const bindOnly = bytesOf([words[0], one, firstEntry, ...words.slice(4, 8)])
+    expect(bindOnly.length).toBe(224)
+    expect(digestOf(bindOnly)).toBe(
+      '36de6c95183d8017fd4cd613a64c0862ebf9272ff69c4d5261492d6905305fad',
+    )
+  })
+})
+
 describe('[TEST-COMMON-07] PKCE derivation', () => {
   const digest = deriveAuthorizationDigest({
     operationDomain,
