@@ -1,0 +1,47 @@
+{
+  "name": "@libid/relayer-client",
+  "version": "0.1.0",
+  "description": "Onboard a libID web wallet through the relayer in one transaction.",
+  "license": "(MIT OR Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libid-org/libID.git",
+    "directory": "ts/packages/relayer-client"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-package.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run --dir src",
+    "test:fork": "vitest run --dir test fork",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "@libid/contracts": "catalog:"
+  },
+  "peerDependencies": {
+    "viem": "^2.48.11"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "viem": "^2.57.20",
+    "vitest": "catalog:"
+  },
+  "files": [
+    "dist",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
