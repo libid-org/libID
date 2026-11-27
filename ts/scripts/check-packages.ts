@@ -68,6 +68,10 @@ writeFileSync(
     },
   }),
 )
+// pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
+const npmEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)),
+)
 execFileSync(
   'npm',
   [
@@ -79,23 +83,23 @@ execFileSync(
     '--cache',
     join(output, 'npm-cache'),
   ],
-  {
-    cwd: consumer,
-    stdio: 'inherit',
-    // pnpm's npm_config_* settings are not npm's; npm warns on them and will reject them.
-    env: Object.fromEntries(
-      Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)),
-    ),
-  },
+  { cwd: consumer, stdio: 'inherit', env: npmEnv },
 )
-// No package needs viem: each loads without it.
-assert(!existsSync(join(consumer, 'node_modules/viem')), 'a package installs viem')
+// viem is the relayer client's peer, and no other package installs it.
+const viem: { dependents: { from: { name?: string } }[] }[] = JSON.parse(
+  execFileSync('npm', ['explain', 'viem', '--json'], { cwd: consumer, env: npmEnv }).toString(),
+)
+assert.deepEqual(
+  [...new Set(viem.flatMap((v) => v.dependents.map((d) => d.from.name)))],
+  ['@libid/relayer-client'],
+  'only the relayer client installs viem',
+)
 execFileSync(
   'node',
   [
     '--input-type=module',
     '-e',
-    "for (const entry of ['@libid/ceremony', '@libid/popup', '@libid/popup/worker', '@libid/popup/testing', '@libid/ens']) await import(entry)",
+    "for (const entry of ['@libid/ceremony', '@libid/popup', '@libid/popup/worker', '@libid/popup/testing', '@libid/ens', '@libid/relayer-client']) await import(entry)",
   ],
   { cwd: consumer, stdio: 'inherit' },
 )
@@ -106,6 +110,7 @@ export * from '@libid/popup'
 export { fakeConnection } from '@libid/popup/testing'
 export type { LedgerId } from '@libid/ledger'
 export { ensName, HandleError, type NameOptions, type Platform } from '@libid/ens'
+export * as relayer from '@libid/relayer-client'
 `,
 )
 writeFileSync(
