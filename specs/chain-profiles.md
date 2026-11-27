@@ -174,21 +174,29 @@ data = abi.encode(uint256 chainId, address wallet, address submitter, bytes key,
 `wallet` is the WebWallet the entry acts on, and its Transaction Author at
 `WalletRegistry` (REQ-CHAIN-05). `key` is the session key to add, empty for
 a link or a removal that adds none. `policyHash` is the hash of the session
-policy the wallet applies to `key`, and zero when `key` is empty.
+policy the wallet applies to `key`, and zero when `key` is empty. For
+`libid.webwallet.link-identity`, `submitter` is `wallet`: the wallet links
+only through its own call.
 
 - REQ-CHAIN-07C (upholds SP-BIND-01, SP-REPLAY-01):
   The WebWallet MUST pass its own immediate caller to `WalletRegistry` as
   the submitter, and `WalletRegistry` MUST reject the entry unless
   `submitter` is not zero and equals the submitter the wallet passed. Neither
   may read the submitter from a forwarded-sender convention such as
-  ERC-2771. Necessity: an entry's `data` is public once submitted (common
-  §5), so without the submitter anyone could copy a login out of a signed
-  batch and apply it alone, or choose which of two entries is applied first.
+  ERC-2771. `WalletRegistry` MUST reject an entry whose `key` is empty and
+  `policyHash` is not zero, or whose `key` is not empty and `policyHash`
+  differs from the hash of the policy the wallet applies to `key`.
+  Necessity: an entry's `data` is public once submitted (common §5), so
+  without the submitter anyone could copy a login out of a signed batch and
+  apply it alone, or choose which of two entries is applied first; and
+  without the policy hash the user could consent to one policy and get
+  another.
 - REQ-CHAIN-07D (upholds SP-BIND-01):
   The Application MUST name as `submitter` only an address that only its
   holder can call through: the wallet itself, an externally owned account,
-  or a contract that checks its own caller. It MUST NOT name a public
-  multicall or any contract that relays calls from any caller. The rule
+  or a contract that calls the wallet only on its holder's authority. It
+  MUST NOT name a public multicall or any contract that relays calls from
+  any caller. The rule
   binds the Application operator, as platform REQ-PLAT-03A does. Necessity:
   a contract that relays any caller makes every caller the submitter.
 
@@ -232,8 +240,8 @@ The policy behind `policyHash` and the same vector are in libID-contracts
 - TEST-CHAIN-05 (exercises REQ-CHAIN-07, REQ-CHAIN-07B):
   Authorized Transaction Data carrying trailing bytes past its argument
   tuple is rejected, and so is a bind target word whose high 12 bytes are
-  not zero. At a Consumer owning `libid.bind-identity` that accepts
-  Operation Lists, each noncanonical list of §3.3 is rejected.
+  not zero. At a Consumer owning `libid.bind-identity`, each noncanonical
+  list of §3.3 is rejected.
 - TEST-CHAIN-06 (exercises REQ-CHAIN-07A):
   A Consumer that commits a chain identifier accepts Authorized Transaction
   Data naming the EIP-155 chain identifier its execution environment reports
@@ -241,6 +249,9 @@ The policy behind `policyHash` and the same vector are in libID-contracts
 - TEST-CHAIN-07 (exercises REQ-CHAIN-07C):
   At `WalletRegistry`, an entry under a `libid.webwallet.*` domain whose
   `submitter` is zero, or differs from the caller the wallet passed, is
-  rejected and its digest stays unspent. The same entry submitted through
-  the wallet by the named submitter is applied. The §3.4 vector's
-  transaction data reproduces.
+  rejected and its digest stays unspent. Submitted through the wallet by
+  any other caller, it is rejected and its digest stays unspent. The same
+  entry submitted through the wallet by the named submitter is applied. An
+  entry with an empty `key` and a nonzero `policyHash`, and one whose
+  `policyHash` differs from the wallet's policy for `key`, are rejected.
+  The §3.4 vector's transaction data reproduces.

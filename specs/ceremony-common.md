@@ -390,18 +390,20 @@ bytes plus the Authorized Transaction Data.
   transaction-data semantics uses a new domain string, not another digest
   field. Under an Operation List these rules apply to the domain of the
   Consumer's own entry (REQ-COMMON-01G). `libid.operations` itself selects
-  no effect. The Consumer that accepts Operation Lists owns it, and MUST
+  no effect. Every Consumer owns it (REQ-COMMON-01K), and MUST
   NOT assign it to any transaction kind but applying its own entry of a
   list.
 
 The operation domain table lists every operation-domain string starting
 with `libid.`. Each row names the protocol that owns the domain and where
 its Authorized Transaction Data encoding is fixed. A new `libid.` domain
-is added here first.
+is added here first. Its entry's `data` becomes public once any entry of
+its list is submitted (REQ-COMMON-01L), so a new domain either binds its
+Transaction Submitter or is harmless when anyone applies it first.
 
 | Domain string | Owner protocol | Data encoding |
 |---|---|---|
-| `libid.operations` | Operation List; every Consumer that accepts lists (REQ-COMMON-01K) | [chain profiles](chain-profiles.md) §3.3 |
+| `libid.operations` | Operation List; every Consumer (REQ-COMMON-01K) | [chain profiles](chain-profiles.md) §3.3 |
 | `libid.bind-identity` | libID identity binding | [platform ceremonies](platform-ceremonies.md) §2.1c; EVM: [chain profiles](chain-profiles.md) §3.3 |
 | `libid.webwallet.link-identity` | libID WebWallet (`WalletRegistry`) | [chain profiles](chain-profiles.md) §3.4 |
 | `libid.webwallet.add-session` | libID WebWallet (`WalletRegistry`) | [chain profiles](chain-profiles.md) §3.4 |
@@ -529,37 +531,38 @@ lists differently go in a separate ceremony.
   Consumer MUST NOT interpret or act on any other entry. Necessity: an entry's `data` and its meaning belong to the
   Consumer that owns its domain.
 - REQ-COMMON-01K (upholds SP-BIND-01):
-  The Consumer MAY accept Operation Lists. The Consumer that accepts them
-  owns `libid.operations` and MUST apply REQ-COMMON-01G through
-  REQ-COMMON-01J and REQ-COMMON-01N. The Consumer that does not MUST reject
-  `libid.operations` as a domain it does not own (REQ-COMMON-06A).
-  Necessity: a Consumer that applies one operation per proof needs no list
-  decoder, and one that lacks it must not read a list as its own data.
+  The Consumer MUST accept both its own domain with its data and an
+  Operation List. Every Consumer owns `libid.operations` and MUST apply
+  REQ-COMMON-01G through REQ-COMMON-01J and REQ-COMMON-01N. Necessity: an
+  Application that had to know which Consumers take lists could compose a
+  list one of them never applies, and two implementations could read one
+  proof two ways.
 - REQ-COMMON-01L (upholds SP-BIND-01):
-  The Application that composes an Operation List MUST place an entry in it
-  only for a Consumer that accepts Operation Lists. The Application MUST
-  place at most one entry under the domains one Consumer deployment owns,
+  The Application that composes an Operation List MUST place at most one
+  entry under the domains one Consumer deployment owns,
   apart from entries under domains whose data commits a chain identifier.
   Under those domains, the Application MUST place at most one entry per
   Consumer Chain for one Consumer protocol. The Application MUST NOT place
   an entry under `libid.operations`. The Application MUST NOT place in an
   entry `data` it needs kept private, or `data` whose application by
   another party first would harm the user. The rule binds the Application
-  operator, as platform REQ-PLAT-03A does. Necessity: an entry for a
-  Consumer that rejects lists, or under `libid.operations`, is never
-  applied; a second entry one Consumer would apply makes it reject the
-  list; and every entry's `data` becomes public, and appliable by others,
-  wherever any entry is submitted.
+  operator, as platform REQ-PLAT-03A does. Necessity: an entry under
+  `libid.operations` is never applied; a second entry one Consumer would
+  apply under the same domain makes it reject the list, and one under
+  another of its domains never runs once the first spends the digest; and
+  every entry's `data` becomes public, and appliable by others, wherever
+  any entry is submitted.
 - REQ-COMMON-01M (upholds SP-BIND-01):
   The Application that composes an Operation List MUST show the user every
   entry, naming the Consumer it is for and the effect its `data`
-  authorizes, before the ceremony starts. The Application MUST NOT start a
+  authorizes, and that every entry becomes public once any one is
+  submitted, before the ceremony starts. The Application MUST NOT start a
   ceremony for a list it has not shown in full. The rule binds the
   Application operator, as platform REQ-PLAT-03A does. Necessity: the digest makes consent exact
   only over what the user saw, and no Consumer can tell an entry the user
   saw from one an operator added.
 - REQ-COMMON-01N (upholds SP-REPLAY-01):
-  The Consumer that accepts Operation Lists MUST let anyone read whether
+  The Consumer MUST let anyone read whether
   it has recorded a given Authorization Digest. Necessity: entries are
   applied independently, so the Application learns which remain only from
   each Consumer.
@@ -569,7 +572,10 @@ lists differently go in a separate ceremony.
   as done and does not stop the others (EVM: a batch call that lets one
   call fail without reverting the rest, or a check of REQ-COMMON-01N in
   the same transaction before each call). A read of REQ-COMMON-01N made
-  off-chain before the submission does not meet this rule. The rule binds
+  off-chain before the submission does not meet this rule. Where the
+  entries share one verification under REQ-COMMON-06F, the Application
+  pays it in a call no spent entry can reject (EVM: `verify` on the Proof
+  Verifier at its payload quotation, immediately before the entries). The rule binds
   the Application operator, as platform REQ-PLAT-03A does. Necessity: an
   entry whose `data` is public can be spent by anyone first, for example
   from a copy of the Application's pending transaction, and a batch that
@@ -593,7 +599,9 @@ every entry's domain and `data` is public wherever any entry is submitted,
 on every Consumer Chain. Nothing in the list is hidden; REQ-COMMON-01L
 keeps out of it what must stay private. Once the Submission is public,
 anyone may apply any entry first at a Consumer that accepts any
-Transaction Submitter (REQ-COMMON-01L).
+Transaction Submitter (REQ-COMMON-01L); a Consumer that binds the
+Transaction Submitter rejects the copy (EVM WebWallet: [chain
+profiles](chain-profiles.md) REQ-CHAIN-07C).
 
 Each Consumer that applies an entry verifies the proof through the Proof
 Verifier; Consumers called in one transaction share one verification only
@@ -1599,10 +1607,8 @@ the constructions that role implements.
 
 - TEST-COMMON-01 (exercises REQ-COMMON-01, REQ-COMMON-01A, REQ-COMMON-01B, REQ-COMMON-01C, REQ-COMMON-01D, REQ-COMMON-01E, REQ-COMMON-01F, REQ-COMMON-02, REQ-COMMON-02A):
   The §5 digest vector reproduces `authorizationDigest` exactly.
-- TEST-COMMON-02 (exercises REQ-COMMON-01A, REQ-COMMON-01F, REQ-COMMON-01K, REQ-COMMON-06A):
-  A Submission carrying a foreign operation domain, including
-  `libid.operations` at a Consumer that accepts no Operation List, or
-  Authorized Transaction Data with trailing bytes, a noncanonical encoding,
+- TEST-COMMON-02 (exercises REQ-COMMON-01A, REQ-COMMON-01F, REQ-COMMON-06A):
+  A Submission carrying a foreign operation domain, or Authorized Transaction Data with trailing bytes, a noncanonical encoding,
   or an argument shape other than the transaction kind's exact format, is
   rejected.
 - TEST-COMMON-02A (exercises REQ-COMMON-01C, REQ-COMMON-01D, REQ-COMMON-04):
@@ -1616,8 +1622,7 @@ the constructions that role implements.
   caller-substituted Block Time; and a Transaction Submitter that cannot satisfy
   the transaction kind's Transaction Author predicate.
 - TEST-COMMON-02B (exercises REQ-COMMON-01B, REQ-COMMON-01F, REQ-COMMON-01G, REQ-COMMON-01I, REQ-COMMON-01J, REQ-COMMON-01K, REQ-COMMON-06A):
-  At Consumers that accept Operation Lists, the Chain Profile's Operation
-  List vector (EVM: chain profiles §3.3) reproduces `transactionData` and
+  The Chain Profile's Operation List vector (EVM: chain profiles §3.3) reproduces `transactionData` and
   `authorizationDigest` exactly. A Consumer owning `libid.bind-identity`,
   called by the vector's target, accepts the vector's Submission and binds
   the target. A second Consumer owning `libid.test.a` accepts the same
@@ -1626,12 +1631,11 @@ the constructions that role implements.
   Verifier of an existing `platformCeremonyVersion`; that claim of
   REQ-COMMON-01B is exercised only against a real Platform Verifier.
 - TEST-COMMON-02C (exercises REQ-COMMON-01A, REQ-COMMON-01F, REQ-COMMON-01H, REQ-COMMON-01I, REQ-COMMON-01K):
-  At Consumers that accept Operation Lists, each derived list of the Chain
-  Profile's vector set (EVM: chain profiles §3.3) is rejected by the
+  Each derived list of the Chain Profile's vector set (EVM: chain profiles §3.3) is rejected by the
   Consumer named with it. A Consumer owning `libid.test.b`, which has no
   entry in the vector, rejects the vector's Submission.
 - TEST-COMMON-02D (exercises REQ-COMMON-01C, REQ-COMMON-01I):
-  A Consumer that accepts Operation Lists, owning a domain whose `data`
+  A Consumer owning a domain whose `data`
   commits a chain identifier, is deployed on two Consumer Chains A and B.
   A list with two entries under that domain, naming A and B, is accepted
   once at each chain, which applies the entry naming it. At A, a list
@@ -1640,8 +1644,8 @@ the constructions that role implements.
 - TEST-COMMON-02E (exercises REQ-COMMON-01A, REQ-COMMON-01L, REQ-COMMON-01M, REQ-COMMON-01O):
   An Application composing an Operation List shows every entry, with its
   Consumer and effect, before the ceremony starts, and starts no ceremony
-  for a list it has not shown. It composes no entry for a Consumer that
-  rejects lists, and no two entries one Consumer deployment would apply.
+  for a list it has not shown, and composes no two entries one Consumer
+  deployment would apply.
   An Application applying three entries, one of which another party spent
   first, applies the other two.
   Every `libid.` operation-domain string a Consumer fixes is in the §5
@@ -1649,7 +1653,7 @@ the constructions that role implements.
   listed twice. Verification: Application tests and inspection of the
   table.
 - TEST-COMMON-02F (exercises REQ-COMMON-01N):
-  A Consumer that accepts Operation Lists reports a digest as not recorded
+  A Consumer reports a digest as not recorded
   before it accepts the digest's Submission and as recorded after, to any
   reader.
 - TEST-COMMON-03 (exercises REQ-COMMON-03, REQ-COMMON-03A):

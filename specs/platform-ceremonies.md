@@ -477,8 +477,7 @@ amount and receiver of §2.1b, which no proof commits.
 - REQ-PLAT-08P (upholds SP-BIND-01, SP-REPLAY-01):
   The Consumer MUST accept a bind call only under the operation domain
   `keccak256(UTF8("libid.bind-identity"))`, as the returned operation
-  domain or, at a Consumer that accepts Operation Lists, as the domain of
-  its own entry (common REQ-COMMON-01G). The Consumer MUST reject Authorized
+  domain or as the domain of its own entry (common REQ-COMMON-01G). The Consumer MUST reject Authorized
   Transaction Data that is not exactly one target in the Chain Profile's
   encoding. The Consumer MUST reject a bind call whose Transaction Author
   is not that target. In an Operation List, that target is its own entry's
